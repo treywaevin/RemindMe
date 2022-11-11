@@ -2,16 +2,22 @@
 
 # Import Modules
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import re
-from reminder import Assignment, add_assignment, list_subjects
+import datetime
+from datetime import date
+from reminder import *
 
-TOKEN = 'MTAxMjU3NzgwNDMzODA5MDAwNQ.GAU-D0.NUOenrKIB41npiu1lJ4UxNvkOdswS0GvD5H2Gw'
+TOKEN = 'ENTER TOKEN HERE'
 
 intents = discord.Intents.default()
 intents.message_content = True
 client = commands.Bot(command_prefix = ".",intents=intents)
 
+# Get current time and date
+today = date.today()
+
+remtime = today.strftime("%m/%d/%Y")
 
 @client.event
 async def on_ready():
@@ -34,6 +40,8 @@ async def on_message(message):
 )
 
 async def add(ctx):
+    if ctx.message.author == client.user:
+        return
     # Comparable to check if date is formatted correctly
     date_format = "^[0-9]{1,2}\\/[0-9]{1,2}\\/[0-9]{4}$"
 
@@ -61,9 +69,69 @@ async def add(ctx):
         if len(split_msg) == 1:
             await ctx.send("Assignment name not inputted")
             return 0
+        
+        if is_present(split_msg[1:]):
+            await ctx.send("Assignment name already exists")
+            return 0
+
 
     # Create New Assignment Object
     add_assignment(" ".join(split_msg[1:]),split_msg[0])
+
+    await ctx.send("Assignment successfully added!")
+
+@client.command(
+    name="list", description="lists all assignments sorted by due date"
+)
+
+async def list(ctx):
+    if ctx.message.author == client.user:
+        return
+    # Print Out All Assignments
+    for i in list_subjects():
+        await ctx.send(i)
+
+@client.command(
+    name="remove", description="Removes entry from assignment list"
+)
+
+async def remove(ctx):
+    if ctx.message.author == client.user:
+        return
+    
+    embed = discord.Embed(
+        title="Please Enter title of assignment you'd like to remove",
+    )
+    sent = await ctx.send(embed=embed)
+
+    msg = await client.wait_for('message', check=lambda message: message.author == ctx.author)
+    if is_present(msg.content):
+        del_assignment(msg.content)
+        await ctx.send("Assignment Deleted")
+    else:
+        await ctx.send("Assignment does not exist")
+
+
+@client.command(
+    name="notify", description="Toggles assignment notification"
+)
+
+async def notify(ctx, enabled="start"):
+    if enabled.lower() == "stop":
+        alertUser.stop()
+        await ctx.send("Notifications have been disabled")
+    elif enabled.lower() == "start":
+        alertUser.start(ctx)
+        await ctx.send("Notifications have been enabled")
+
+@tasks.loop(hours = 12)
+async def alertUser(ctx):
+    # Check if current date matches due date of one of your assignments
+    for i in asgns:
+        print(i.due_date, remtime)
+        if i.due_date == remtime:
+            await ctx.send("The assignment: {}, is due today!".format(i.name))
+
 
 
 # Runs Bot
